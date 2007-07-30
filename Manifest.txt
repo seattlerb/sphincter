@@ -1,0 +1,16 @@
+History.txt
+LICENSE.txt
+Manifest.txt
+README.txt
+Rakefile
+lib/sphincter.rb
+lib/sphincter/association_searcher.rb
+lib/sphincter/configure.rb
+lib/sphincter/search.rb
+lib/sphincter/search_stub.rb
+lib/sphincter/tasks.rb
+test/sphincter_test_case.rb
+test/test_sphincter_association_searcher.rb
+test/test_sphincter_configure.rb
+test/test_sphincter_search.rb
+test/test_sphincter_search_stub.rb
