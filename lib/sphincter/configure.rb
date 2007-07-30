@@ -41,6 +41,7 @@ require 'sphincter'
 #           connect to.
 # port:: Which port searchd and Sphincter will connect to.
 # path:: Location of searchd indexes, relative to RAILS_ROOT.
+# per_page:: How many items to include in a search by default.
 #
 # All other entries are from Sphinx.
 #
@@ -69,7 +70,7 @@ module Sphincter::Configure
       'charset_type' => 'utf-8',
       'docinfo' => 'extern',
       'min_word_len' => 1,
-      'morpholoy' => 'stem_en',
+      'morphology' => 'stem_en',
       'stopwords' => '',
     },
 

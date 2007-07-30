@@ -53,6 +53,10 @@ Load Sphincter in config/environment.rb:
 
   require 'sphincter'
 
+By default, Sphincter will run searchd on the same port for all
+environments.  See Sphincter::Configure for how to configure different
+environments to use different ports.
+
 Add indexes to models:
 
   class Post < ActiveRecord::Base
@@ -75,6 +79,10 @@ Start searchd:
   $ rake sphincter:start_searchd
 
 Then test it out in your browser.
+
+== TESTING QUICK-START:
+
+See Sphinx::SearchStub.
 
 == EXAMPLES:
 

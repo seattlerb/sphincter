@@ -20,7 +20,7 @@ class TestSphincterConfigure < SphincterTestCase
       "charset_type" => "utf-8",
       "docinfo" => "extern",
       "min_word_len" => 1,
-      "morpholoy" => "stem_en",
+      "morphology" => "stem_en",
       "stopwords" => "",
     },
     "source" => {
