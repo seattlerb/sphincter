@@ -80,7 +80,6 @@ module Sphincter::Configure
 
     'mysql' => {
       'sql_query_pre' => [
-        'SET SESSION group_concat_max_len = 65535',
         'SET NAMES utf8',
       ],
     },
