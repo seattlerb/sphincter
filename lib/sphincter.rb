@@ -94,6 +94,11 @@ module Sphincter
 
   VERSION = '1.0.0'
 
+  ##
+  # Sphincter error base class.
+
+  class Error < RuntimeError; end
+
 end
 
 require 'sphincter/configure'

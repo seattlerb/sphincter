@@ -9,7 +9,7 @@ class TestSphincterAssociationSearcher < SphincterTestCase
     attr_accessor :reflection
 
     def initialize
-      @reflection = SphincterTestCase::Reflection.new :has_many, 'other'
+      @reflection = SphincterTestCase::BelongsTo.reflections.last
       klass = Object.new
       def klass.search_args() @search_args end
       def klass.search(*args) @search_args = args; :searched end
@@ -21,7 +21,7 @@ class TestSphincterAssociationSearcher < SphincterTestCase
     end
 
     def proxy_owner()
-      SphincterTestCase::Other.new
+      SphincterTestCase::BelongsTo.new
     end
   end
 
@@ -31,7 +31,7 @@ class TestSphincterAssociationSearcher < SphincterTestCase
     results = proxy.search 'words'
 
     assert_equal :searched, results
-    assert_equal ['words', { :conditions => { 'other_id' => 42 } } ],
+    assert_equal ['words', { :conditions => { 'models_id' => 42 } } ],
                  proxy.proxy_reflection.klass.search_args
   end
 

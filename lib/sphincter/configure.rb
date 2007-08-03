@@ -209,6 +209,11 @@ module Sphincter::Configure
             assoc.name == as_name.intern
           end
 
+          if as_assoc.nil? then
+            raise Sphincter::Error,
+                  "could not find association \"#{as_name}\" in model \"#{klass.name}\""
+          end
+
           as_klass = as_assoc.class_name.constantize
           as_table = as_klass.table_name 
           as_pkey = conn.quote_column_name as_assoc.primary_key_name.to_s

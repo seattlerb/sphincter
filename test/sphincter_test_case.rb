@@ -5,7 +5,7 @@ require 'tmpdir'
 $TESTING = true
 
 class String
-  def constantize() SphincterTestCase::Other end
+  def constantize() SphincterTestCase::BelongsTo end
 end
 
 require 'sphincter'
@@ -102,14 +102,14 @@ class SphincterTestCase < Test::Unit::TestCase
       @options = {}
     end
 
-    def class_name() @name.to_s.capitalize end
+    def class_name() @name.to_s.sub(/s$/, '').capitalize end
     def primary_key_name() "#{@name}_id" end
   end
 
   class Model
 
-    @reflections = [Reflection.new(:belongs_to, 'other'),
-                    Reflection.new(:has_many, 'other')]
+    @reflections = [Reflection.new(:belongs_to, 'belongs_to'),
+                    Reflection.new(:has_many, 'manys')]
 
     class << self; attr_accessor :reflections; end
 
@@ -142,13 +142,21 @@ class SphincterTestCase < Test::Unit::TestCase
 
   end
 
-  class Other < Model
-    @reflections = [Reflection.new(:belongs_to, 'model'),
-                    Reflection.new(:has_many, 'model')]
+  class BelongsTo < Model
+    @reflections = [Reflection.new(:belongs_to, 'something'),
+                    Reflection.new(:has_many, 'models')]
 
-    def self.table_name() 'others' end
+    def self.table_name() 'belongs_tos' end
 
     def id() 42 end
+  end
+
+  class HasMany < Model
+    @reflections = [Reflection.new(:belongs_to, 'models')]
+
+    def self.table_name() 'has_manys' end
+
+    def id() 84 end
   end
 
   class Model
@@ -176,7 +184,7 @@ class SphincterTestCase < Test::Unit::TestCase
     Sphincter::Configure.instance_variable_set '@index_count', nil if
       Sphincter::Configure.instance_variables.include? '@index_count'
 
-    Other.reflections.last.options.delete :extend
+    BelongsTo.reflections.last.options.delete :extend
   end
 
   def teardown

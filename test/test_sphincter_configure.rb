@@ -151,10 +151,24 @@ searchd
     assert_equal expected, Sphincter::Configure.get_sources
   end
 
-  def test_self_get_sources_include
+  def test_self_get_sources_include_nonexistent_association
     Sphincter::Search.indexes[Model] << {
       :fields => %w[text],
-      :include => %w[other.string]
+      :include => %w[nonexistent.string]
+    }
+
+    e = assert_raise Sphincter::Error do
+      Sphincter::Configure.get_sources
+    end
+
+    assert_equal "could not find association \"nonexistent\" in model \"Model\"",
+                 e.message
+  end
+
+  def test_self_get_sources_include_belongs_to
+    Sphincter::Search.indexes[Model] << {
+      :fields => %w[text],
+      :include => %w[belongs_to.string]
     }
 
     expected = {
@@ -170,9 +184,9 @@ searchd
                  "0 AS sphincter_index_id, " \
                  "'Model' AS sphincter_klass, " \
                  "models.`text` AS `text`, " \
-                 "others.`string` AS `others_string` " \
-            "FROM models, others " \
-            "WHERE models.`other_id` = others.`id` AND "\
+                 "belongs_tos.`string` AS `belongs_tos_string` " \
+            "FROM models, belongs_tos " \
+            "WHERE models.`belongs_to_id` = belongs_tos.`id` AND "\
                   "models.`id` >= $start AND " \
                   "models.`id` <= $end"
       }

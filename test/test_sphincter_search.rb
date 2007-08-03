@@ -12,15 +12,15 @@ class TestSphincterSearch < SphincterTestCase
   def test_add_index
     Model.add_index :fields => %w[text]
 
-    assert_equal [{ :fields => %w[text other_id] }],
+    assert_equal [{ :fields => %w[text belongs_to_id] }],
                  Sphincter::Search.indexes[Model]
 
-    other_belongs_to = Other.reflections.first
-    other_has_many = Other.reflections.last
+    belongs_to_belongs_to = BelongsTo.reflections.first
+    belongs_to_has_many = BelongsTo.reflections.last
 
-    assert_equal({}, other_belongs_to.options, 'Other belongs_to')
+    assert_equal({}, belongs_to_belongs_to.options, 'BelongsTo belongs_to')
     assert_equal({ :extend => [Sphincter::AssociationSearcher] },
-                 other_has_many.options, 'Other has_many')
+                 belongs_to_has_many.options, 'BelongsTo has_many')
   end
 
   def test_sphincter_convert_values
