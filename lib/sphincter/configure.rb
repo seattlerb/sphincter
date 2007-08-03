@@ -171,6 +171,8 @@ module Sphincter::Configure
   def self.get_sources
     load_models
 
+    index_defaults = { :conditions => [], :fields => [], :include => [] }
+
     indexes = Sphincter::Search.indexes
     index_count # HACK necessary to set options[:index_id] per-index
 
@@ -178,33 +180,54 @@ module Sphincter::Configure
 
     indexes.each do |klass, model_indexes|
       model_indexes.each do |options|
+        source_conf = {}
+        fields = []
+        where = []
+
+        options = index_defaults.merge options
         conn = klass.connection
         table = klass.table_name
+        tables = [table]
         pk = conn.quote_column_name klass.primary_key
         index_id = options[:index_id]
 
-        source_conf = {}
         source_conf['sql_date_column'] = []
         source_conf['sql_group_column'] = %w[sphincter_index_id]
 
-        fields = []
         fields << "(#{table}.#{pk} * #{index_count} + #{index_id}) AS #{pk}"
         fields << "#{index_id} AS sphincter_index_id"
-        fields << "#{conn.quote table} AS klass"
+        fields << "'#{klass.name}' AS sphincter_klass"
 
         options[:fields].each do |field|
           fields << get_sources_field(source_conf, klass, field)
         end
 
+        options[:include].each do |as_include|
+          as_name, as_field = as_include.split '.', 2
+
+          as_assoc = klass.reflect_on_all_associations.find do |assoc|
+            assoc.name == as_name.intern
+          end
+
+          as_klass = as_assoc.class_name.constantize
+          as_table = as_klass.table_name 
+          as_pkey = conn.quote_column_name as_assoc.primary_key_name.to_s
+          as_fkey = conn.quote_column_name as_klass.primary_key.to_s
+
+          tables << as_table
+          fields << get_sources_field(source_conf, as_klass, as_field, as_table)
+          where << "#{table}.#{as_pkey} = #{as_table}.#{as_fkey}"
+        end
+
         fields = fields.join ', '
 
-        where = []
-        where << "#{table}.#{pk} >= $start AND #{table}.#{pk} <= $end"
-        where << options[:conditions]
+        where << "#{table}.#{pk} >= $start"
+        where << "#{table}.#{pk} <= $end"
+        where.push(*options[:conditions])
         where = where.compact.join ' AND '
 
         source_conf['sql_query'] =
-          "SELECT #{fields} FROM #{table} WHERE #{where}"
+          "SELECT #{fields} FROM #{tables.join ', '} WHERE #{where}"
         source_conf['sql_query_info'] =
           "SELECT * FROM #{table} " \
             "WHERE #{table}.#{pk} = (($id - #{index_id}) / #{index_count})"
@@ -226,21 +249,27 @@ module Sphincter::Configure
   # get_sources_field only understands :datetime, :boolean, :integer, :string
   # and :text column types.
 
-  def self.get_sources_field(source_conf, klass, field)
+  def self.get_sources_field(source_conf, klass, field, as_table = nil)
     conn = klass.connection
     table = klass.table_name
 
     quoted_field = conn.quote_column_name field
-    case klass.columns_hash[field].type
-    when :date, :datetime, :time, :timestamp then
-      source_conf['sql_date_column'] << field
-      "UNIX_TIMESTAMP(#{table}.#{quoted_field}) AS #{quoted_field}"
-    when :boolean, :integer then
-      source_conf['sql_group_column'] << field
-      "#{table}.#{quoted_field} AS #{quoted_field}"
-    when :string, :text then
-      "#{table}.#{quoted_field} AS #{quoted_field}"
-    end
+
+    type = case klass.columns_hash[field].type
+           when :date, :datetime, :time, :timestamp then
+             source_conf['sql_date_column'] << field
+             "UNIX_TIMESTAMP(#{table}.#{quoted_field})"
+           when :boolean, :integer then
+             source_conf['sql_group_column'] << field
+             "#{table}.#{quoted_field}"
+           when :string, :text then
+             "#{table}.#{quoted_field}"
+           end
+
+    as_name = [as_table, field].compact.join '_'
+    as_name = conn.quote_column_name as_name
+
+    "#{type} AS #{as_name}"
   end
 
   ##

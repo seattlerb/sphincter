@@ -44,10 +44,22 @@ module Sphincter::Search
   # Options are:
   #
   # :name:: Name of index.  Defaults to ActiveRecord::Base::table_name.
-  # :fields:: Fields to index.  Columns from belongs_to associations are
-  #           automatically added.
-  # :conditions:: Hash of SQL conditions that predicate inclusion in the
-  #               search index.
+  # :fields:: Array of fields to index.  Foreign key columns for belongs_to
+  #           associations are automatically added.
+  # :include:: Array of columns from belongs_to associations to include in the
+  #            index.
+  # :conditions:: Array of SQL conditions that will be ANDed together to
+  #               predicate inclusion in the search index.
+  #
+  # Example:
+  #
+  #   class Post < ActiveRecord::Base
+  #     belongs_to :user
+  #     belongs_to :blog
+  #
+  #     add_index :fields => %w[title body], :include => %w[user.name],
+  #               :conditions => ['published = 1']
+  #   end
 
   def add_index(options = {})
     options[:fields] ||= []

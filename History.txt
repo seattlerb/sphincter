@@ -1,3 +1,8 @@
+== 1.1.0 / ??
+
+* N major enhancements
+  * Fields across belongs_to relationships may be included via add_index.
+
 == 1.0.0 / 2007-07-26
 
 * 1 major enhancement

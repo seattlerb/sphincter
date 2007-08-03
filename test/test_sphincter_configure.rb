@@ -6,7 +6,6 @@ class TestSphincterConfigure < SphincterTestCase
   DEFAULT_GET_CONF_EXPECTED = {
     "mysql" =>  {
       "sql_query_pre" => [
-        "SET SESSION group_concat_max_len = 65535",
         "SET NAMES utf8",
       ]
     },
@@ -142,10 +141,40 @@ searchd
         "sql_query" =>
           "SELECT (models.`id` * 1 + 0) AS `id`, " \
                  "0 AS sphincter_index_id, " \
-                 "`models` AS klass, "\
+                 "'Model' AS sphincter_klass, "\
                  "models.`text` AS `text` " \
             "FROM models WHERE models.`id` >= $start AND " \
                               "models.`id` <= $end"
+      }
+    }
+
+    assert_equal expected, Sphincter::Configure.get_sources
+  end
+
+  def test_self_get_sources_include
+    Sphincter::Search.indexes[Model] << {
+      :fields => %w[text],
+      :include => %w[other.string]
+    }
+
+    expected = {
+      "models" => {
+        "strip_html" => 0,
+        "sql_group_column" => ["sphincter_index_id"],
+        "sql_query_range" => "SELECT MIN(`id`), MAX(`id`) FROM models",
+        "sql_query_info" =>
+          "SELECT * FROM models WHERE models.`id` = (($id - 0) / 1)",
+        "sql_date_column" => [],
+        "sql_query" =>
+          "SELECT (models.`id` * 1 + 0) AS `id`, " \
+                 "0 AS sphincter_index_id, " \
+                 "'Model' AS sphincter_klass, " \
+                 "models.`text` AS `text`, " \
+                 "others.`string` AS `others_string` " \
+            "FROM models, others " \
+            "WHERE models.`other_id` = others.`id` AND "\
+                  "models.`id` >= $start AND " \
+                  "models.`id` <= $end"
       }
     }
 

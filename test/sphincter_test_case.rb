@@ -87,22 +87,22 @@ class SphincterTestCase < Test::Unit::TestCase
   end
 
   class Connection
-    def quote(name) "`#{name}`" end
+    def quote(name) "'#{name}'" end
     def quote_column_name(name) "`#{name}`" end
   end
 
   class Reflection
     attr_accessor :klass
-    attr_reader :macro, :options
+    attr_reader :macro, :options, :name
 
     def initialize(macro, name)
       @klass = Model
       @macro = macro
-      @name = name
+      @name = name.intern
       @options = {}
     end
 
-    def class_name() "SphincterTestCase::#{@name.capitalize}" end
+    def class_name() @name.to_s.capitalize end
     def primary_key_name() "#{@name}_id" end
   end
 
@@ -130,6 +130,8 @@ class SphincterTestCase < Test::Unit::TestCase
 
     def self.find(ids) ids end
 
+    def self.name() 'Model' end
+
     def self.primary_key() 'id' end
 
     def self.reflect_on_all_associations
@@ -143,6 +145,8 @@ class SphincterTestCase < Test::Unit::TestCase
   class Other < Model
     @reflections = [Reflection.new(:belongs_to, 'model'),
                     Reflection.new(:has_many, 'model')]
+
+    def self.table_name() 'others' end
 
     def id() 42 end
   end
