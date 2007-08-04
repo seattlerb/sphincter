@@ -50,6 +50,142 @@ require 'sphincter'
 
 module Sphincter::Configure
 
+  class Index
+
+    attr_reader :source_conf
+
+    attr_reader :name
+
+    def initialize(klass, options)
+      @fields = []
+      @where = []
+      @group = false
+
+      @source_conf = {}
+      @source_conf['sql_date_column'] = []
+      @source_conf['sql_group_column'] = %w[sphincter_index_id]
+
+      @klass = klass
+      @table = @klass.table_name
+      @conn = @klass.connection
+      @tables = [@table]
+
+      defaults = {
+        :conditions => [],
+        :fields => [],
+        :include => [],
+        :name => @table,
+      }
+
+      @options = defaults.merge options
+
+      @name = @options[:name] || @table
+    end
+
+    def add_field(field, klass = @klass, as_table = nil)
+      table = klass.table_name
+      quoted_field = @conn.quote_column_name field
+
+      column_type = klass.columns_hash[field].type
+      expr = case column_type
+             when :date, :datetime, :time, :timestamp then
+               @source_conf['sql_date_column'] << field
+               "UNIX_TIMESTAMP(#{table}.#{quoted_field})"
+             when :boolean, :integer then
+               @source_conf['sql_group_column'] << field
+               "#{table}.#{quoted_field}"
+             when :string, :text then
+               "#{table}.#{quoted_field}"
+             else
+               raise Sphincter::Error, "unknown column type #{column_type}"
+             end
+
+      as_name = [as_table, field].compact.join '_'
+      as_name = @conn.quote_column_name as_name
+
+    "#{expr} AS #{as_name}"
+    end
+
+    def add_include(assoc_include)
+      as_name, as_field = assoc_include.split '.', 2
+
+      as_assoc = @klass.reflect_on_all_associations.find do |assoc|
+        assoc.name == as_name.intern
+      end
+
+      if as_assoc.nil? then
+        raise Sphincter::Error,
+            "could not find association \"#{as_name}\" in #{@klass.name}"
+      end
+
+      as_klass = as_assoc.class_name.constantize
+      as_table = as_klass.table_name
+
+      as_klass_key = @conn.quote_column_name as_klass.primary_key.to_s
+      as_assoc_key = @conn.quote_column_name as_assoc.primary_key_name.to_s
+
+      case as_assoc.macro
+      when :belongs_to then
+        @tables << as_table
+        @fields << add_field(as_field, as_klass, as_table)
+        @where << "#{@table}.#{as_assoc_key} = #{as_table}.#{as_klass_key}"
+      when :has_many then
+        as_pkey = @conn.quote_column_name as_klass.primary_key.to_s
+        as_fkey = @conn.quote_column_name as_assoc.primary_key_name.to_s
+
+        as_name = [as_table, as_field].compact.join '_'
+        as_name = @conn.quote_column_name as_name
+
+        field = @conn.quote_column_name as_field
+
+        @tables << as_table
+        @fields << "GROUP_CONCAT(#{as_table}.#{field} SEPARATOR ' ') AS #{as_name}"
+        @where << "#{@table}.#{as_klass_key} = #{as_table}.#{as_assoc_key}"
+        @group = true
+      else
+        raise Sphincter::Error,
+              "unsupported macro #{as_assoc.macro} for \"#{as_name}\" " \
+              "in #{klass.name}.add_index"
+      end
+    end
+
+    def configure
+      conn = @klass.connection
+      pk = conn.quote_column_name @klass.primary_key
+      index_id = @options[:index_id]
+
+      index_count = Sphincter::Configure.index_count
+
+      @fields << "(#{@table}.#{pk} * #{index_count} + #{index_id}) AS #{pk}"
+      @fields << "#{index_id} AS sphincter_index_id"
+      @fields << "'#{@klass.name}' AS sphincter_klass"
+
+      @options[:fields].each do |field| @fields << add_field(field) end
+      @options[:include].each do |as_include| add_include as_include end
+
+      @fields = @fields.join ', '
+
+      @where << "#{@table}.#{pk} >= $start"
+      @where << "#{@table}.#{pk} <= $end"
+      @where.push(*@options[:conditions])
+      @where = @where.compact.join ' AND '
+
+      query = "SELECT #{@fields} FROM #{@tables.join ', '} WHERE #{@where}"
+      query << " GROUP BY #{@table}.#{pk}" if @group
+
+      @source_conf['sql_query'] = query
+      @source_conf['sql_query_info'] =
+        "SELECT * FROM #{@table} " \
+          "WHERE #{@table}.#{pk} = (($id - #{index_id}) / #{index_count})"
+      @source_conf['sql_query_range'] =
+        "SELECT MIN(#{pk}), MAX(#{pk}) FROM #{@table}"
+      @source_conf['strip_html'] = @options[:strip_html] ? 1 : 0
+
+      @source_conf
+    end
+
+  end
+
   @env_conf = nil
   @index_count = nil
 
@@ -171,8 +307,6 @@ module Sphincter::Configure
   def self.get_sources
     load_models
 
-    index_defaults = { :conditions => [], :fields => [], :include => [] }
-
     indexes = Sphincter::Search.indexes
     index_count # HACK necessary to set options[:index_id] per-index
 
@@ -180,58 +314,10 @@ module Sphincter::Configure
 
     indexes.each do |klass, model_indexes|
       model_indexes.each do |options|
-        source_conf = {}
-        fields = []
-        where = []
-        group = false
+        index = Index.new klass, options
+        index.configure
 
-        options = index_defaults.merge options
-        conn = klass.connection
-        table = klass.table_name
-        tables = [table]
-        pk = conn.quote_column_name klass.primary_key
-        index_id = options[:index_id]
-
-        source_conf['sql_date_column'] = []
-        source_conf['sql_group_column'] = %w[sphincter_index_id]
-
-        fields << "(#{table}.#{pk} * #{index_count} + #{index_id}) AS #{pk}"
-        fields << "#{index_id} AS sphincter_index_id"
-        fields << "'#{klass.name}' AS sphincter_klass"
-
-        options[:fields].each do |field|
-          fields << get_sources_field(source_conf, klass, field)
-        end
-
-        options[:include].each do |as_include|
-          t, f, w, g = get_sources_include as_include, source_conf, klass
-
-          tables << t
-          fields << f
-          where << w
-          group ||= g
-        end
-
-        fields = fields.join ', '
-
-        where << "#{table}.#{pk} >= $start"
-        where << "#{table}.#{pk} <= $end"
-        where.push(*options[:conditions])
-        where = where.compact.join ' AND '
-
-        query = "SELECT #{fields} FROM #{tables.join ', '} WHERE #{where}"
-        query << " GROUP BY #{table}.#{pk}" if group
-
-        source_conf['sql_query'] = query
-        source_conf['sql_query_info'] =
-          "SELECT * FROM #{table} " \
-            "WHERE #{table}.#{pk} = (($id - #{index_id}) / #{index_count})"
-        source_conf['sql_query_range'] =
-          "SELECT MIN(#{pk}), MAX(#{pk}) FROM #{table}"
-        source_conf['strip_html'] = options[:strip_html] ? 1 : 0
-
-        name = options[:name] || table
-        sources[name] = source_conf
+        sources[index.name] = index.source_conf
       end
     end
 
@@ -243,74 +329,6 @@ module Sphincter::Configure
   #
   # get_sources_field only understands :datetime, :boolean, :integer, :string
   # and :text column types.
-
-  def self.get_sources_field(source_conf, klass, field, as_table = nil)
-    conn = klass.connection
-    table = klass.table_name
-
-    quoted_field = conn.quote_column_name field
-
-    type = case klass.columns_hash[field].type
-           when :date, :datetime, :time, :timestamp then
-             source_conf['sql_date_column'] << field
-             "UNIX_TIMESTAMP(#{table}.#{quoted_field})"
-           when :boolean, :integer then
-             source_conf['sql_group_column'] << field
-             "#{table}.#{quoted_field}"
-           when :string, :text then
-             "#{table}.#{quoted_field}"
-           end
-
-    as_name = [as_table, field].compact.join '_'
-    as_name = conn.quote_column_name as_name
-
-    "#{type} AS #{as_name}"
-  end
-
-  def self.get_sources_include(assoc_include, source_conf, klass)
-    conn = klass.connection
-
-    as_name, as_field = assoc_include.split '.', 2
-
-    as_assoc = klass.reflect_on_all_associations.find do |assoc|
-      assoc.name == as_name.intern
-    end
-
-    if as_assoc.nil? then
-      raise Sphincter::Error,
-            "could not find association \"#{as_name}\" in #{klass.name}"
-    end
-
-    as_klass = as_assoc.class_name.constantize
-    as_table = as_klass.table_name
-    as_klass_key = conn.quote_column_name as_klass.primary_key.to_s
-    as_assoc_key = conn.quote_column_name as_assoc.primary_key_name.to_s
-
-    case as_assoc.macro
-    when :belongs_to then
-      [as_table,
-       get_sources_field(source_conf, as_klass, as_field, as_table),
-       "#{klass.table_name}.#{as_assoc_key} = #{as_table}.#{as_klass_key}",
-       false]
-    when :has_many then
-      as_pkey = conn.quote_column_name as_klass.primary_key.to_s
-      as_fkey = conn.quote_column_name as_assoc.primary_key_name.to_s
-
-      as_name = [as_table, as_field].compact.join '_'
-      as_name = conn.quote_column_name as_name
-
-      field = conn.quote_column_name as_field
-
-      [as_table,
-       "GROUP_CONCAT(#{as_table}.#{field} SEPARATOR ' ') AS #{as_name}",
-       "#{klass.table_name}.#{as_klass_key} = #{as_table}.#{as_assoc_key}",
-       true]
-    else
-      raise Sphincter::Error,
-            "unsupported macro #{as_assoc.macro} for \"#{as_name}\" " \
-            "in #{klass.name}.add_index"
-    end
-  end
 
   ##
   # Retrieves the database configuration for ActiveRecord::Base and adapts it

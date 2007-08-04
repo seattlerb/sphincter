@@ -151,122 +151,6 @@ searchd
     assert_equal expected, Sphincter::Configure.get_sources
   end
 
-  def test_self_get_sources_include_belongs_to
-    Sphincter::Search.indexes[Model] << {
-      :fields => %w[text],
-      :include => %w[belongs_to.string]
-    }
-
-    expected = {
-      "models" => {
-        "strip_html" => 0,
-        "sql_group_column" => ["sphincter_index_id"],
-        "sql_query_range" => "SELECT MIN(`id`), MAX(`id`) FROM models",
-        "sql_query_info" =>
-          "SELECT * FROM models WHERE models.`id` = (($id - 0) / 1)",
-        "sql_date_column" => [],
-        "sql_query" =>
-          "SELECT (models.`id` * 1 + 0) AS `id`, " \
-                 "0 AS sphincter_index_id, " \
-                 "'Model' AS sphincter_klass, " \
-                 "models.`text` AS `text`, " \
-                 "belongs_tos.`string` AS `belongs_tos_string` " \
-            "FROM models, belongs_tos " \
-            "WHERE models.`belongs_to_id` = belongs_tos.`id` AND "\
-                  "models.`id` >= $start AND " \
-                  "models.`id` <= $end"
-      }
-    }
-
-    assert_equal expected, Sphincter::Configure.get_sources
-  end
-
-  def test_self_get_sources_include_has_many
-    Sphincter::Search.indexes[Model] << {
-      :fields => %w[text],
-      :include => %w[manys.string]
-    }
-
-    expected = {
-      "models" => {
-        "strip_html" => 0,
-        "sql_group_column" => ["sphincter_index_id"],
-        "sql_query_range" => "SELECT MIN(`id`), MAX(`id`) FROM models",
-        "sql_query_info" =>
-          "SELECT * FROM models WHERE models.`id` = (($id - 0) / 1)",
-        "sql_date_column" => [],
-        "sql_query" =>
-          "SELECT (models.`id` * 1 + 0) AS `id`, " \
-                 "0 AS sphincter_index_id, " \
-                 "'Model' AS sphincter_klass, " \
-                 "models.`text` AS `text`, " \
-                 "GROUP_CONCAT(has_manys.`string` SEPARATOR ' ') AS " \
-                   "`has_manys_string` " \
-            "FROM models, has_manys " \
-            "WHERE models.`id` = has_manys.`manys_id` AND "\
-                  "models.`id` >= $start AND " \
-                  "models.`id` <= $end " \
-            "GROUP BY models.`id`"
-      }
-    }
-
-    assert_equal expected, Sphincter::Configure.get_sources
-  end
-
-  def test_self_get_sources_include_nonexistent_association
-    Sphincter::Search.indexes[Model] << {
-      :fields => %w[text],
-      :include => %w[nonexistent.string]
-    }
-
-    e = assert_raise Sphincter::Error do
-      Sphincter::Configure.get_sources
-    end
-
-    assert_equal "could not find association \"nonexistent\" in Model",
-                 e.message
-  end
-
-  def test_self_get_sources_field
-    source_conf = { 'sql_group_column' => [], 'sql_date_column' => [] }
-    klass = Model
-
-    fields = []
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'date')
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'datetime')
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'boolean')
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'integer')
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'string')
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'time')
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'timestamp')
-    fields << Sphincter::Configure.get_sources_field(source_conf, klass,
-                                                    'text')
-
-    expected_fields = [
-      "UNIX_TIMESTAMP(models.`date`) AS `date`",
-      "UNIX_TIMESTAMP(models.`datetime`) AS `datetime`",
-      "models.`boolean` AS `boolean`",
-      "models.`integer` AS `integer`",
-      "models.`string` AS `string`",
-      "UNIX_TIMESTAMP(models.`time`) AS `time`",
-      "UNIX_TIMESTAMP(models.`timestamp`) AS `timestamp`",
-      "models.`text` AS `text`"
-    ]
-
-    assert_equal expected_fields,  fields
-
-    assert_equal %w[boolean integer], source_conf['sql_group_column']
-    assert_equal %w[date datetime time timestamp],
-                 source_conf['sql_date_column']
-  end
-
   def test_self_get_db_conf
     expected = {
       'type' => 'mysql',
@@ -387,6 +271,85 @@ index source_2
 
   def util_deep_clone(obj)
     Marshal.load Marshal.dump(obj)
+  end
+
+end
+
+class Sphincter::Configure::Index
+  attr_reader :fields, :where, :tables, :group
+end
+
+class TestSphincterConfigureIndex < SphincterTestCase
+
+  def setup
+    super
+
+    @index = Sphincter::Configure::Index.new Model, {}
+  end
+
+  def test_self_add_field
+    fields = []
+    fields << @index.add_field('date')
+    fields << @index.add_field('datetime')
+    fields << @index.add_field('boolean')
+    fields << @index.add_field('integer')
+    fields << @index.add_field('string')
+    fields << @index.add_field('time')
+    fields << @index.add_field('timestamp')
+    fields << @index.add_field('text')
+
+    expected_fields = [
+      "UNIX_TIMESTAMP(models.`date`) AS `date`",
+      "UNIX_TIMESTAMP(models.`datetime`) AS `datetime`",
+      "models.`boolean` AS `boolean`",
+      "models.`integer` AS `integer`",
+      "models.`string` AS `string`",
+      "UNIX_TIMESTAMP(models.`time`) AS `time`",
+      "UNIX_TIMESTAMP(models.`timestamp`) AS `timestamp`",
+      "models.`text` AS `text`"
+    ]
+
+    assert_equal expected_fields,  fields
+
+    assert_equal %w[sphincter_index_id boolean integer],
+                 @index.source_conf['sql_group_column']
+    assert_equal %w[date datetime time timestamp],
+                 @index.source_conf['sql_date_column']
+  end
+
+  def test_self_add_field_unknown
+    e = assert_raise Sphincter::Error do
+      @index.add_field 'other'
+    end
+
+    assert_equal 'unknown column type NilClass', e.message
+  end
+
+  def test_add_include_belongs_to
+    @index.add_include 'belongs_to.string'
+
+    assert_equal ["belongs_tos.`string` AS `belongs_tos_string`"], @index.fields
+    assert_equal %w[models belongs_tos], @index.tables
+    assert_equal ["models.`belongs_to_id` = belongs_tos.`id`"], @index.where
+    assert_equal false, @index.group
+  end
+
+  def test_add_include_has_many
+    @index.add_include 'manys.string'
+
+    assert_equal ["GROUP_CONCAT(has_manys.`string` SEPARATOR ' ') AS `has_manys_string`"], @index.fields
+    assert_equal %w[models has_manys], @index.tables
+    assert_equal ["models.`id` = has_manys.`manys_id`"], @index.where
+    assert_equal true, @index.group
+  end
+
+  def test_add_include_nonexistent_association
+    e = assert_raise Sphincter::Error do
+      @index.add_include 'nonexistent.string'
+    end
+
+    assert_equal "could not find association \"nonexistent\" in Model",
+                 e.message
   end
 
 end
