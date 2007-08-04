@@ -151,20 +151,6 @@ searchd
     assert_equal expected, Sphincter::Configure.get_sources
   end
 
-  def test_self_get_sources_include_nonexistent_association
-    Sphincter::Search.indexes[Model] << {
-      :fields => %w[text],
-      :include => %w[nonexistent.string]
-    }
-
-    e = assert_raise Sphincter::Error do
-      Sphincter::Configure.get_sources
-    end
-
-    assert_equal "could not find association \"nonexistent\" in model \"Model\"",
-                 e.message
-  end
-
   def test_self_get_sources_include_belongs_to
     Sphincter::Search.indexes[Model] << {
       :fields => %w[text],
@@ -193,6 +179,52 @@ searchd
     }
 
     assert_equal expected, Sphincter::Configure.get_sources
+  end
+
+  def test_self_get_sources_include_has_many
+    Sphincter::Search.indexes[Model] << {
+      :fields => %w[text],
+      :include => %w[manys.string]
+    }
+
+    expected = {
+      "models" => {
+        "strip_html" => 0,
+        "sql_group_column" => ["sphincter_index_id"],
+        "sql_query_range" => "SELECT MIN(`id`), MAX(`id`) FROM models",
+        "sql_query_info" =>
+          "SELECT * FROM models WHERE models.`id` = (($id - 0) / 1)",
+        "sql_date_column" => [],
+        "sql_query" =>
+          "SELECT (models.`id` * 1 + 0) AS `id`, " \
+                 "0 AS sphincter_index_id, " \
+                 "'Model' AS sphincter_klass, " \
+                 "models.`text` AS `text`, " \
+                 "GROUP_CONCAT(has_manys.`string` SEPARATOR ' ') AS " \
+                   "`has_manys_string` " \
+            "FROM models, has_manys " \
+            "WHERE models.`id` = has_manys.`manys_id` AND "\
+                  "models.`id` >= $start AND " \
+                  "models.`id` <= $end " \
+            "GROUP BY models.`id`"
+      }
+    }
+
+    assert_equal expected, Sphincter::Configure.get_sources
+  end
+
+  def test_self_get_sources_include_nonexistent_association
+    Sphincter::Search.indexes[Model] << {
+      :fields => %w[text],
+      :include => %w[nonexistent.string]
+    }
+
+    e = assert_raise Sphincter::Error do
+      Sphincter::Configure.get_sources
+    end
+
+    assert_equal "could not find association \"nonexistent\" in Model",
+                 e.message
   end
 
   def test_self_get_sources_field

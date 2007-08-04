@@ -183,6 +183,7 @@ module Sphincter::Configure
         source_conf = {}
         fields = []
         where = []
+        group = false
 
         options = index_defaults.merge options
         conn = klass.connection
@@ -203,25 +204,12 @@ module Sphincter::Configure
         end
 
         options[:include].each do |as_include|
-          as_name, as_field = as_include.split '.', 2
+          t, f, w, g = get_sources_include as_include, source_conf, klass
 
-          as_assoc = klass.reflect_on_all_associations.find do |assoc|
-            assoc.name == as_name.intern
-          end
-
-          if as_assoc.nil? then
-            raise Sphincter::Error,
-                  "could not find association \"#{as_name}\" in model \"#{klass.name}\""
-          end
-
-          as_klass = as_assoc.class_name.constantize
-          as_table = as_klass.table_name 
-          as_pkey = conn.quote_column_name as_assoc.primary_key_name.to_s
-          as_fkey = conn.quote_column_name as_klass.primary_key.to_s
-
-          tables << as_table
-          fields << get_sources_field(source_conf, as_klass, as_field, as_table)
-          where << "#{table}.#{as_pkey} = #{as_table}.#{as_fkey}"
+          tables << t
+          fields << f
+          where << w
+          group ||= g
         end
 
         fields = fields.join ', '
@@ -231,8 +219,10 @@ module Sphincter::Configure
         where.push(*options[:conditions])
         where = where.compact.join ' AND '
 
-        source_conf['sql_query'] =
-          "SELECT #{fields} FROM #{tables.join ', '} WHERE #{where}"
+        query = "SELECT #{fields} FROM #{tables.join ', '} WHERE #{where}"
+        query << " GROUP BY #{table}.#{pk}" if group
+
+        source_conf['sql_query'] = query
         source_conf['sql_query_info'] =
           "SELECT * FROM #{table} " \
             "WHERE #{table}.#{pk} = (($id - #{index_id}) / #{index_count})"
@@ -275,6 +265,51 @@ module Sphincter::Configure
     as_name = conn.quote_column_name as_name
 
     "#{type} AS #{as_name}"
+  end
+
+  def self.get_sources_include(assoc_include, source_conf, klass)
+    conn = klass.connection
+
+    as_name, as_field = assoc_include.split '.', 2
+
+    as_assoc = klass.reflect_on_all_associations.find do |assoc|
+      assoc.name == as_name.intern
+    end
+
+    if as_assoc.nil? then
+      raise Sphincter::Error,
+            "could not find association \"#{as_name}\" in #{klass.name}"
+    end
+
+    as_klass = as_assoc.class_name.constantize
+    as_table = as_klass.table_name
+    as_klass_key = conn.quote_column_name as_klass.primary_key.to_s
+    as_assoc_key = conn.quote_column_name as_assoc.primary_key_name.to_s
+
+    case as_assoc.macro
+    when :belongs_to then
+      [as_table,
+       get_sources_field(source_conf, as_klass, as_field, as_table),
+       "#{klass.table_name}.#{as_assoc_key} = #{as_table}.#{as_klass_key}",
+       false]
+    when :has_many then
+      as_pkey = conn.quote_column_name as_klass.primary_key.to_s
+      as_fkey = conn.quote_column_name as_assoc.primary_key_name.to_s
+
+      as_name = [as_table, as_field].compact.join '_'
+      as_name = conn.quote_column_name as_name
+
+      field = conn.quote_column_name as_field
+
+      [as_table,
+       "GROUP_CONCAT(#{as_table}.#{field} SEPARATOR ' ') AS #{as_name}",
+       "#{klass.table_name}.#{as_klass_key} = #{as_table}.#{as_assoc_key}",
+       true]
+    else
+      raise Sphincter::Error,
+            "unsupported macro #{as_assoc.macro} for \"#{as_name}\" " \
+            "in #{klass.name}.add_index"
+    end
   end
 
   ##

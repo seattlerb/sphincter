@@ -5,7 +5,13 @@ require 'tmpdir'
 $TESTING = true
 
 class String
-  def constantize() SphincterTestCase::BelongsTo end
+  def constantize()
+    case self
+    when /belongs_to/i then SphincterTestCase::BelongsTo
+    when /many/i       then SphincterTestCase::HasMany
+    else raise "missing klass for #{self}"
+    end
+  end
 end
 
 require 'sphincter'

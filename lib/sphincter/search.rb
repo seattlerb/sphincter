@@ -46,8 +46,8 @@ module Sphincter::Search
   # :name:: Name of index.  Defaults to ActiveRecord::Base::table_name.
   # :fields:: Array of fields to index.  Foreign key columns for belongs_to
   #           associations are automatically added.
-  # :include:: Array of columns from belongs_to associations to include in the
-  #            index.
+  # :include:: Array of "association.column" for fields from associations to
+  #            include in the index.
   # :conditions:: Array of SQL conditions that will be ANDed together to
   #               predicate inclusion in the search index.
   #
@@ -56,8 +56,10 @@ module Sphincter::Search
   #   class Post < ActiveRecord::Base
   #     belongs_to :user
   #     belongs_to :blog
-  #
-  #     add_index :fields => %w[title body], :include => %w[user.name],
+  #     has_many :comments
+  #   
+  #     add_index :fields => %w[title body],
+  #               :include => %w[user.name comments.body],
   #               :conditions => ['published = 1']
   #   end
 
