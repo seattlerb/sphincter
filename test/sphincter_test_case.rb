@@ -5,11 +5,12 @@ require 'tmpdir'
 $TESTING = true
 
 class String
-  def constantize()
+  def constantize
     case self
     when /belongs_to/i then SphincterTestCase::BelongsTo
     when /many/i       then SphincterTestCase::HasMany
-    else raise "missing klass for #{self}"
+    when /poly/i       then SphincterTestCase::Poly
+    else raise "missing klass for #{self} in #constantize"
     end
   end
 end
@@ -101,11 +102,11 @@ class SphincterTestCase < Test::Unit::TestCase
     attr_accessor :klass
     attr_reader :macro, :options, :name
 
-    def initialize(macro, name)
+    def initialize(macro, name, options = {})
       @klass = Model
       @macro = macro
       @name = name.intern
-      @options = {}
+      @options = options
     end
 
     def class_name() @name.to_s.sub(/s$/, '').capitalize end
@@ -115,7 +116,8 @@ class SphincterTestCase < Test::Unit::TestCase
   class Model
 
     @reflections = [Reflection.new(:belongs_to, 'belongs_to'),
-                    Reflection.new(:has_many, 'manys')]
+                    Reflection.new(:has_many, 'manys'),
+                    Reflection.new(:has_many, 'polys', :as => :polyable)]
 
     class << self; attr_accessor :reflections; end
 
@@ -126,6 +128,7 @@ class SphincterTestCase < Test::Unit::TestCase
         'boolean' => Column.new(:boolean),
         'date' => Column.new(:date),
         'datetime' => Column.new(:datetime),
+        'float' => Column.new(:float),
         'integer' => Column.new(:integer),
         'string' => Column.new(:string),
         'text' => Column.new(:text),
@@ -163,6 +166,15 @@ class SphincterTestCase < Test::Unit::TestCase
     def self.table_name() 'has_manys' end
 
     def id() 84 end
+  end
+
+  class Poly < Model
+    @reflections = [Reflection.new(:belongs_to, 'polyable',
+                                   :polymorphic => true)]
+
+    def self.table_name() 'polys' end
+
+    def id() 126 end
   end
 
   class Model

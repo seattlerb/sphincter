@@ -92,7 +92,7 @@ module Sphincter
   ##
   # This is the version of Sphincter you are using.
 
-  VERSION = '1.0.0'
+  VERSION = '1.1.0'
 
   ##
   # Sphincter error base class.

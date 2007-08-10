@@ -45,9 +45,8 @@ module Sphincter::Search
   #
   # :name:: Name of index.  Defaults to ActiveRecord::Base::table_name.
   # :fields:: Array of fields to index.  Foreign key columns for belongs_to
-  #           associations are automatically added.
-  # :include:: Array of "association.column" for fields from associations to
-  #            include in the index.
+  #           associations are automatically added.  Fields from associations
+  #           may be included by using "association.field".
   # :conditions:: Array of SQL conditions that will be ANDed together to
   #               predicate inclusion in the search index.
   #
@@ -58,10 +57,20 @@ module Sphincter::Search
   #     belongs_to :blog
   #     has_many :comments
   #   
-  #     add_index :fields => %w[title body],
-  #               :include => %w[user.name comments.body],
+  #     add_index :fields => %w[title body user.name, comments.body],
   #               :conditions => ['published = 1']
   #   end
+  #
+  # When including fields from associations, MySQL's GROUP_CONCAT() function
+  # is used.  By default this will create a string up to 1024 characters long.
+  # A larger string can be used by changing the value of MySQL's
+  # group_concat_max_len variable.  To do this, add the following to your
+  # sphincter.RAILS_ENV.yml files:
+  #
+  #   mysql:
+  #     sql_query_pre:
+  #       - SET NAMES utf8
+  #       - SET SESSION group_concat_max_len = VALUE
 
   def add_index(options = {})
     options[:fields] ||= []

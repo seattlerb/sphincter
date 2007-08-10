@@ -50,11 +50,17 @@ require 'sphincter'
 
 module Sphincter::Configure
 
+  ##
+  # A class for building sphinx.conf source/index sections.
+
   class Index
 
     attr_reader :source_conf
 
     attr_reader :name
+
+    ##
+    # Creates a new Index for +klass+ and +options+.
 
     def initialize(klass, options)
       @fields = []
@@ -68,12 +74,11 @@ module Sphincter::Configure
       @klass = klass
       @table = @klass.table_name
       @conn = @klass.connection
-      @tables = [@table]
+      @tables = @table.dup
 
       defaults = {
         :conditions => [],
         :fields => [],
-        :include => [],
         :name => @table,
       }
 
@@ -81,6 +86,10 @@ module Sphincter::Configure
 
       @name = @options[:name] || @table
     end
+
+    ##
+    # Adds plain field +field+ to the index from class +klass+ using
+    # +as_table+ as the table name.
 
     def add_field(field, klass = @klass, as_table = nil)
       table = klass.table_name
@@ -106,9 +115,10 @@ module Sphincter::Configure
     "#{expr} AS #{as_name}"
     end
 
-    def add_include(assoc_include)
-      as_name, as_field = assoc_include.split '.', 2
+    ##
+    # Includes field +as_field+ from association +as_name+ in the index.
 
+    def add_include(as_name, as_field)
       as_assoc = @klass.reflect_on_all_associations.find do |assoc|
         assoc.name == as_name.intern
       end
@@ -126,10 +136,17 @@ module Sphincter::Configure
 
       case as_assoc.macro
       when :belongs_to then
-        @tables << as_table
         @fields << add_field(as_field, as_klass, as_table)
-        @where << "#{@table}.#{as_assoc_key} = #{as_table}.#{as_klass_key}"
+        @tables << " LEFT JOIN #{as_table} ON" \
+                   " #{@table}.#{as_assoc_key} = #{as_table}.#{as_klass_key}"
+
       when :has_many then
+        if as_assoc.options.include? :through then
+          raise Sphincter::Error,
+                "unsupported macro has_many :through for \"#{as_name}\" " \
+                "in #{klass.name}.add_index"
+        end
+
         as_pkey = @conn.quote_column_name as_klass.primary_key.to_s
         as_fkey = @conn.quote_column_name as_assoc.primary_key_name.to_s
 
@@ -138,9 +155,21 @@ module Sphincter::Configure
 
         field = @conn.quote_column_name as_field
 
-        @tables << as_table
         @fields << "GROUP_CONCAT(#{as_table}.#{field} SEPARATOR ' ') AS #{as_name}"
-        @where << "#{@table}.#{as_klass_key} = #{as_table}.#{as_assoc_key}"
+
+        if as_assoc.options.include? :as then
+          poly_name = as_assoc.options[:as]
+          id_col = @conn.quote_column_name "#{poly_name}_id"
+          type_col = @conn.quote_column_name "#{poly_name}_type"
+
+          @tables << " LEFT JOIN #{as_table} ON"\
+                     " #{@table}.#{as_klass_key} = #{as_table}.#{id_col} AND" \
+                     " #{@conn.quote @klass.name} = #{as_table}.#{type_col}"
+        else
+          @tables << " LEFT JOIN #{as_table} ON" \
+                     " #{@table}.#{as_klass_key} = #{as_table}.#{as_assoc_key}"
+        end
+
         @group = true
       else
         raise Sphincter::Error,
@@ -160,8 +189,12 @@ module Sphincter::Configure
       @fields << "#{index_id} AS sphincter_index_id"
       @fields << "'#{@klass.name}' AS sphincter_klass"
 
-      @options[:fields].each do |field| @fields << add_field(field) end
-      @options[:include].each do |as_include| add_include as_include end
+      @options[:fields].each do |field|
+        case field
+        when /\./ then add_include(*field.split('.', 2))
+        else           @fields << add_field(field)
+        end
+      end
 
       @fields = @fields.join ', '
 
@@ -170,7 +203,7 @@ module Sphincter::Configure
       @where.push(*@options[:conditions])
       @where = @where.compact.join ' AND '
 
-      query = "SELECT #{@fields} FROM #{@tables.join ', '} WHERE #{@where}"
+      query = "SELECT #{@fields} FROM #{@tables} WHERE #{@where}"
       query << " GROUP BY #{@table}.#{pk}" if @group
 
       @source_conf['sql_query'] = query

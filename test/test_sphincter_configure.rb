@@ -128,7 +128,9 @@ searchd
   end
 
   def test_self_get_sources
-    Sphincter::Search.indexes[Model] << { :fields => %w[text] }
+    Sphincter::Search.indexes[Model] << {
+      :fields => %w[text belongs_to.string]
+    }
 
     expected = {
       "models" => {
@@ -142,9 +144,11 @@ searchd
           "SELECT (models.`id` * 1 + 0) AS `id`, " \
                  "0 AS sphincter_index_id, " \
                  "'Model' AS sphincter_klass, "\
-                 "models.`text` AS `text` " \
-            "FROM models WHERE models.`id` >= $start AND " \
-                              "models.`id` <= $end"
+                 "models.`text` AS `text`, " \
+                 "belongs_tos.`string` AS `belongs_tos_string` "\
+            "FROM models LEFT JOIN belongs_tos ON " \
+                 "models.`belongs_to_id` = belongs_tos.`id` " \
+            "WHERE models.`id` >= $start AND models.`id` <= $end"
       }
     }
 
@@ -319,33 +323,59 @@ class TestSphincterConfigureIndex < SphincterTestCase
 
   def test_self_add_field_unknown
     e = assert_raise Sphincter::Error do
-      @index.add_field 'other'
+      @index.add_field 'float'
     end
 
-    assert_equal 'unknown column type NilClass', e.message
+    assert_equal 'unknown column type float', e.message
   end
 
   def test_add_include_belongs_to
-    @index.add_include 'belongs_to.string'
+    @index.add_include 'belongs_to', 'string'
 
     assert_equal ["belongs_tos.`string` AS `belongs_tos_string`"], @index.fields
-    assert_equal %w[models belongs_tos], @index.tables
-    assert_equal ["models.`belongs_to_id` = belongs_tos.`id`"], @index.where
+
+    tables = "models LEFT JOIN belongs_tos ON " \
+               "models.`belongs_to_id` = belongs_tos.`id`"
+    assert_equal tables, @index.tables
+
+    assert_equal [], @index.where
+
     assert_equal false, @index.group
   end
 
   def test_add_include_has_many
-    @index.add_include 'manys.string'
+    @index.add_include 'manys', 'string'
 
-    assert_equal ["GROUP_CONCAT(has_manys.`string` SEPARATOR ' ') AS `has_manys_string`"], @index.fields
-    assert_equal %w[models has_manys], @index.tables
-    assert_equal ["models.`id` = has_manys.`manys_id`"], @index.where
+    fields = [
+      "GROUP_CONCAT(has_manys.`string` SEPARATOR ' ') AS `has_manys_string`"
+    ]
+    assert_equal fields, @index.fields
+
+    tables = "models LEFT JOIN has_manys ON models.`id` = has_manys.`manys_id`"
+    assert_equal tables, @index.tables
+
+    assert_equal [], @index.where
+    assert_equal true, @index.group
+  end
+
+  def test_add_include_has_many_polymorphic
+    @index.add_include 'polys', 'string'
+
+    fields = ["GROUP_CONCAT(polys.`string` SEPARATOR ' ') AS `polys_string`"]
+    assert_equal fields, @index.fields
+
+    tables = "models LEFT JOIN polys ON " \
+               "models.`id` = polys.`polyable_id` AND " \
+               "'Model' = polys.`polyable_type`"
+    assert_equal tables, @index.tables
+
+    assert_equal [], @index.where
     assert_equal true, @index.group
   end
 
   def test_add_include_nonexistent_association
     e = assert_raise Sphincter::Error do
-      @index.add_include 'nonexistent.string'
+      @index.add_include 'nonexistent', 'string'
     end
 
     assert_equal "could not find association \"nonexistent\" in Model",
