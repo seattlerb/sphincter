@@ -4,6 +4,10 @@ Eric Hodel <drbrain@segment7.net>
 
 http://seattlerb.org/Sphincter
 
+File bugs:
+
+http://rubyforge.org/tracker/?func=add&group_id=1513&atid=5921
+
 Sphincter was named by David Yeu.
 
 == DESCRIPTION:
@@ -41,21 +45,23 @@ For complete documentation:
 
 Download and install Sphinx from http://www.sphinxsearch.com/downloads.html
 
-Download Sphinx Ruby API from http://rubyforge.org/frs/?group_id=2604&release_id=11049
-
-Unpack Sphinx Ruby API into vendor/plugins/.
-
 Install Sphincter:
 
   $ gem install Sphincter
 
+Load Sphincter tasks in Rakefile:
+
+  require 'sphincter/tasks'
+
+Setup the Dmytro Shteflyuk's Sphinx client:
+
+  $ rake sphincter:setup_sphinx
+
+Add vendor/plugins/sphinx to your SCM system.
+
 Load Sphincter in config/environment.rb:
 
   require 'sphincter'
-
-By default, Sphincter will run searchd on the same port for all
-environments.  See Sphincter::Configure for how to configure different
-environments to use different ports.
 
 Add indexes to models:
 
@@ -74,11 +80,24 @@ Add searching UI:
     end
   end
 
+  <ol>
+  <% @results.records.each do |post| -%>
+    <li>
+      <div><%= link_to post.title, post_path(post) %></div>
+      <div><%= truncate post.body, 250 %></div>
+    </li>
+  <% end -%>
+  </ol>
+
 Start searchd:
 
   $ rake sphincter:start_searchd
 
 Then test it out in your browser.
+
+NOTE:  By default, Sphincter will run searchd on the same port for all
+environments.  See Sphincter::Configure for how to configure different
+environments to use different ports.
 
 == TESTING QUICK-START:
 
@@ -92,33 +111,35 @@ Example ActiveRecord model:
 
   class Post < ActiveRecord::Base
     belongs_to :blog
+    belongs_to :user
   
     # published is a boolean and title and body are string or text fields
+    # user.name is automatically fetched via the user association
     add_index :fields => %w[title body published]
   end
-  
+
 Simple search:
 
   Post.search 'words'
-  
+
 Only search published posts:
 
   Post.search 'words', :conditions => { :published => 1 }
-  
+
 Only search posts created in the last week:
 
   now = Time.now
   ago = now - 1.weeks
   Post.search 'words', :between => { :created_on => [ago, now] }
-  
+
 Pagination (defaults to ten records/page):
 
   Post.search 'words', :page => 2
-  
+
 Pagination with custom page size:
 
   Post.search 'words', :page => 2, :per_page => 20
-  
+
 Pagination with custom page size (better):
 
 Add to config/sphincter.yml:
