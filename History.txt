@@ -1,10 +1,15 @@
-== 1.1.0 / ??
+== 1.1.0 / 2007-08-13
 
-* N major enhancements
+* 2 major enhancements:
   * Fields across relationships may be included via add_index.
+  * Sphincter now automatically configures Dmytro Shteflyuk's sphinx API.  Run
+    `rake sphincter:setup_sphinx` and check in vendor/plugins/sphinx.
+* 1 bug fix:
+  * `rake sphincter:index` task didn't correctly run reindex.  Bug submitted
+    by Lee O'Mara.
 
 == 1.0.0 / 2007-07-26
 
-* 1 major enhancement
+* 1 major enhancement:
   * Birthday!
 

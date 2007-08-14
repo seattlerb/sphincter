@@ -21,7 +21,7 @@ namespace :sphincter do
 
     indexes_found = Dir[File.join(sphinx_dir, '*.spd')].length
 
-    Rake::Task['sphincter::reindex'].invoke if indexes_found > indexes_defined
+    Rake::Task['sphincter:reindex'].invoke if indexes_found > indexes_defined
   end
 
   desc 'Runs the sphinx indexer'
