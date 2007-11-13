@@ -343,6 +343,21 @@ class TestSphincterConfigureIndex < SphincterTestCase
     assert_equal false, @index.group
   end
 
+  def test_add_include_belongs_to_twice_only_joins_once
+    @index.add_include 'belongs_to', 'string'
+    @index.add_include 'belongs_to', 'text'
+
+    assert_equal ["belongs_tos.`string` AS `belongs_tos_string`", "belongs_tos.`text` AS `belongs_tos_text`"], @index.fields
+
+    tables = "models LEFT JOIN belongs_tos ON " \
+               "models.`belongs_to_id` = belongs_tos.`id`"
+    assert_equal tables, @index.tables
+
+    assert_equal [], @index.where
+
+    assert_equal false, @index.group
+  end
+
   def test_add_include_has_many
     @index.add_include 'manys', 'string'
 
@@ -358,10 +373,46 @@ class TestSphincterConfigureIndex < SphincterTestCase
     assert_equal true, @index.group
   end
 
+  def test_add_include_has_many_twice_only_joins_once
+    @index.add_include 'manys', 'string'
+    @index.add_include 'manys', 'text'
+
+    fields = [
+      "GROUP_CONCAT(has_manys.`string` SEPARATOR ' ') AS `has_manys_string`",
+      "GROUP_CONCAT(has_manys.`text` SEPARATOR ' ') AS `has_manys_text`"
+    ]
+    assert_equal fields, @index.fields
+
+    tables = "models LEFT JOIN has_manys ON models.`id` = has_manys.`manys_id`"
+    assert_equal tables, @index.tables
+
+    assert_equal [], @index.where
+    assert_equal true, @index.group
+  end
+
   def test_add_include_has_many_polymorphic
     @index.add_include 'polys', 'string'
 
     fields = ["GROUP_CONCAT(polys.`string` SEPARATOR ' ') AS `polys_string`"]
+    assert_equal fields, @index.fields
+
+    tables = "models LEFT JOIN polys ON " \
+               "models.`id` = polys.`polyable_id` AND " \
+               "'Model' = polys.`polyable_type`"
+    assert_equal tables, @index.tables
+
+    assert_equal [], @index.where
+    assert_equal true, @index.group
+  end
+
+  def test_add_include_has_many_polymorphic_twice_only_joins_once
+    @index.add_include 'polys', 'string'
+    @index.add_include 'polys', 'text'
+
+    fields = [
+      "GROUP_CONCAT(polys.`string` SEPARATOR ' ') AS `polys_string`",
+      "GROUP_CONCAT(polys.`text` SEPARATOR ' ') AS `polys_text`"
+      ]
     assert_equal fields, @index.fields
 
     tables = "models LEFT JOIN polys ON " \

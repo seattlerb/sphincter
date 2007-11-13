@@ -75,6 +75,7 @@ module Sphincter::Configure
       @table = @klass.table_name
       @conn = @klass.connection
       @tables = @table.dup
+      @joined_tables = @table.dup
 
       defaults = {
         :conditions => [],
@@ -137,8 +138,7 @@ module Sphincter::Configure
       case as_assoc.macro
       when :belongs_to then
         @fields << add_field(as_field, as_klass, as_table)
-        @tables << " LEFT JOIN #{as_table} ON" \
-                   " #{@table}.#{as_assoc_key} = #{as_table}.#{as_klass_key}"
+        add_join(as_table, as_klass_key, as_assoc_key)
 
       when :has_many then
         if as_assoc.options.include? :through then
@@ -162,12 +162,9 @@ module Sphincter::Configure
           id_col = @conn.quote_column_name "#{poly_name}_id"
           type_col = @conn.quote_column_name "#{poly_name}_type"
 
-          @tables << " LEFT JOIN #{as_table} ON"\
-                     " #{@table}.#{as_klass_key} = #{as_table}.#{id_col} AND" \
-                     " #{@conn.quote @klass.name} = #{as_table}.#{type_col}"
+          add_join(as_table, id_col, as_klass_key, " AND #{@conn.quote @klass.name} = #{as_table}.#{type_col}")
         else
-          @tables << " LEFT JOIN #{as_table} ON" \
-                     " #{@table}.#{as_klass_key} = #{as_table}.#{as_assoc_key}"
+          add_join(as_table, as_assoc_key, as_klass_key)
         end
 
         @group = true
@@ -176,6 +173,13 @@ module Sphincter::Configure
               "unsupported macro #{as_assoc.macro} for \"#{as_name}\" " \
               "in #{klass.name}.add_index"
       end
+    end
+
+    def add_join(dest_table, dest_field, src_field, extra_query = nil)
+      return if @joined_tables.include?(dest_table)
+      @tables << " LEFT JOIN #{dest_table} ON" \
+                 " #{@table}.#{src_field} = #{dest_table}.#{dest_field}#{extra_query}"
+      @joined_tables << dest_table
     end
 
     def configure

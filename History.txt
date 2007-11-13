@@ -1,3 +1,9 @@
+== 1.1.1
+
+* 1 bug fix:
+  * Don't join twice when searching on multiple association fields.  Patch
+    submitted by Benjamin Curtis.
+
 == 1.1.0 / 2007-08-13
 
 * 2 major enhancements:
